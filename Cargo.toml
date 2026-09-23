@@ -1,0 +1,15 @@
+[workspace]
+members = ["rust/crates/postcraft_core", "rust/crates/postcraft_media"]
+resolver = "2"
+
+[workspace.package]
+edition = "2024"
+license = "MIT"
+rust-version = "1.85"
+
+[workspace.lints.rust]
+unsafe_code = "deny"
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(frb_expand)"] }
+
+[workspace.lints.clippy]
+all = "warn"

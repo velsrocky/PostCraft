@@ -1,0 +1,2 @@
+[build]
+target-dir = "rust/crates/postcraft_core/target"

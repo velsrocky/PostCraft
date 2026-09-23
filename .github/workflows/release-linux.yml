@@ -1,0 +1,37 @@
+name: Linux Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        required: true
+        type: string
+
+jobs:
+  appimage:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.8'
+          channel: stable
+          cache: true
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev ffmpeg wget librsvg2-bin
+      - name: Install appimagetool
+        run: |
+          wget -q https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage -O appimagetool
+          chmod +x appimagetool
+      - name: Build and package
+        env:
+          APPIMAGETOOL: ${{ github.workspace }}/appimagetool
+          POSTCRAFT_VERSION: ${{ inputs.version }}
+        run: make package-linux-appimage
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: postcraft-linux-${{ inputs.version }}
+          path: build/PostCraft-*.AppImage

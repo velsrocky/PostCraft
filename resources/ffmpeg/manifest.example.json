@@ -1,0 +1,10 @@
+{
+  "version": "8.0.1",
+  "source": "https://example.invalid/ffmpeg-build.tar.xz",
+  "license": "LGPL-2.1-or-later",
+  "architecture": "x86_64",
+  "ffmpegSha256": "replace-with-release-checksum",
+  "ffprobeSha256": "replace-with-release-checksum",
+  "buildConfiguration": "replace-with-configure-flags",
+  "notices": "replace-with-notices-file"
+}

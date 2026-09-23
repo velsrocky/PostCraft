@@ -1,0 +1,19 @@
+# Flutter / Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+build/
+coverage/
+apps/desktop/.dart_tool/
+apps/desktop/build/
+
+# Rust
+target/
+rust/**/target/
+
+# IDE / local config
+.idea/
+.vscode/
+*.iml
+.DS_Store

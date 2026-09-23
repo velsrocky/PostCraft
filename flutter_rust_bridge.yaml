@@ -1,0 +1,8 @@
+rust_input: crate::api
+rust_root: rust/crates/postcraft_core
+dart_output: apps/desktop/lib/src/rust
+c_output: rust/crates/postcraft_core/src/frb_generated.h
+rust_output: rust/crates/postcraft_core/src/frb_generated.rs
+dart_entrypoint_class_name: PostCraftRust
+dart_root: apps/desktop
+web: false
