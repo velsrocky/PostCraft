@@ -34,8 +34,17 @@ pipeline.
 - GTK 3 and its runtime dependencies
 - A D-Bus user session
 - `xdg-desktop-portal` with a Screenshot portal backend for capture
-- FFmpeg and ffprobe on `PATH` for media conversion, unless explicitly
-  configured with `POSTCRAFT_FFMPEG` and `POSTCRAFT_FFPROBE`
+- **FFmpeg and ffprobe on `PATH`** for screen recording, timeline render,
+  video posters, and audio waveforms, unless explicitly configured with
+  `POSTCRAFT_FFMPEG` and `POSTCRAFT_FFPROBE`
+
+Install FFmpeg from your distribution:
+
+```bash
+sudo apt install ffmpeg        # Debian / Ubuntu
+sudo dnf install ffmpeg        # Fedora
+sudo pacman -S ffmpeg          # Arch Linux
+```
 
 FFmpeg is not bundled by this repository. A release distributor must provide
 the binaries and corresponding license/provenance notices before advertising
@@ -45,7 +54,10 @@ video export as available.
 
 - Region and full-screen screenshots are supported when the portal advertises
   them.
+- Multi-display capture targets are enumerated on X11 via `xrandr` and
+  selectable from the capture home screen.
 - Global shortcuts are opt-in and capability-gated.
-- Window capture, screen recording, system audio, and multi-display target
-  selection remain under active development.
-- Windows and macOS capture adapters are not included in this Linux release.
+- Window capture (interactive still), system audio, and microphone capture
+  remain under active development.
+- Windows and macOS have capture/recording adapters compiled in, but the
+  primary verified release target remains this Linux AppImage.

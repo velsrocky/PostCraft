@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.velstech.postcraft</id>
+  <name>PostCraft</name>
+  <summary>Capture, annotate, and export locally</summary>
+  <metadata_license>MIT</metadata_license>
+  <project_license>MIT</project_license>
+  <description>
+    <p>PostCraft is a local-first desktop workspace for screenshot capture, visual annotation, and media export.</p>
+  </description>
+  <launchable type="desktop-id">com.velstech.postcraft.desktop</launchable>
+  <developer id="com.velstech">
+    <name>Velstech</name>
+  </developer>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="1.0.0" date="2026-09-24"/>
+  </releases>
+</component>

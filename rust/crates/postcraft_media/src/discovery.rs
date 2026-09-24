@@ -23,28 +23,46 @@ fn is_executable(path: &Path) -> bool {
     }
 }
 
+/// Candidate file names for a sidecar search: the bare name plus the Windows
+/// `.exe` spelling so a bundled `ffmpeg.exe` is found from any host and a
+/// bundled `ffmpeg` is found on Unix. `name` may already include `.exe`.
+fn sidecar_names(name: &str) -> Vec<String> {
+    let mut names = vec![name.to_owned()];
+    if !name.ends_with(".exe") {
+        names.push(format!("{name}.exe"));
+    }
+    names
+}
+
+/// Directories searched for a bundled engine next to the running executable.
+fn sidecar_dirs(dir: &Path) -> [PathBuf; 3] {
+    [dir.to_path_buf(), dir.join("lib"), dir.join("resources")]
+}
+
 /// Pure resolver: explicit `env_value` → bundled sidecar next to `exe_dir` →
 /// bare PATH command name. Split out so it is testable without mutating the
 /// process environment (whose setters are `unsafe` in edition 2024).
 fn resolve_one(env_value: Option<OsString>, exe_dir: Option<&Path>, name: &str) -> Option<PathBuf> {
     if let Some(explicit) = env_value {
-        let path = PathBuf::from(explicit);
-        if is_executable(&path) {
-            return Some(path);
+        for candidate_name in sidecar_names(&explicit.to_string_lossy()) {
+            let path = PathBuf::from(&candidate_name);
+            if is_executable(&path) {
+                return Some(path);
+            }
         }
     }
     if let Some(dir) = exe_dir {
-        for candidate in [
-            dir.join(name),
-            dir.join("lib").join(name),
-            dir.join("resources").join(name),
-        ] {
-            if is_executable(&candidate) {
-                return Some(candidate);
+        for base in sidecar_dirs(dir) {
+            for candidate_name in sidecar_names(name) {
+                let candidate = base.join(&candidate_name);
+                if is_executable(&candidate) {
+                    return Some(candidate);
+                }
             }
         }
     }
     // Defer to PATH resolution; a launch failure surfaces as a capability error.
+    // CreateProcess on Windows will append `.exe` itself, so the bare name wins.
     Some(PathBuf::from(name))
 }
 
@@ -71,6 +89,27 @@ pub fn resolve_engines() -> EnginePaths {
 mod tests {
     use super::*;
 
+    fn scratch_dir(label: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "postcraft-discovery-{label}-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[cfg(unix)]
+    fn make_executable(path: &Path) {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+
+    #[cfg(not(unix))]
+    fn make_executable(path: &Path) {
+        let _ = path;
+    }
+
     #[test]
     fn falls_back_to_path_command_name() {
         let resolved = resolve_one(None, None, "ffmpeg");
@@ -78,14 +117,53 @@ mod tests {
     }
 
     #[test]
+    fn path_fallback_preserves_windows_style_names() {
+        let resolved = resolve_one(None, None, "ffmpeg.exe");
+        assert_eq!(resolved, Some(PathBuf::from("ffmpeg.exe")));
+        let resolved = resolve_one(None, None, "ffprobe.exe");
+        assert_eq!(resolved, Some(PathBuf::from("ffprobe.exe")));
+    }
+
+    #[test]
+    fn sidecar_search_finds_exe_named_candidate() {
+        let dir = scratch_dir("exe-named");
+        let binary = dir.join("ffmpeg.exe");
+        std::fs::write(&binary, b"").unwrap();
+        make_executable(&binary);
+        let resolved = resolve_one(None, Some(&dir), "ffmpeg.exe");
+        assert_eq!(resolved, Some(binary));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn sidecar_search_appends_exe_suffix_for_bare_name() {
+        let dir = scratch_dir("exe-suffix");
+        let binary = dir.join("ffprobe.exe");
+        std::fs::write(&binary, b"").unwrap();
+        make_executable(&binary);
+        let resolved = resolve_one(None, Some(&dir), "ffprobe");
+        assert_eq!(resolved, Some(binary));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn sidecar_search_covers_lib_and_resources_directories() {
+        let dir = scratch_dir("sidecar-dirs");
+        let lib_dir = dir.join("lib");
+        std::fs::create_dir_all(&lib_dir).unwrap();
+        let binary = lib_dir.join("ffmpeg.exe");
+        std::fs::write(&binary, b"").unwrap();
+        make_executable(&binary);
+        let resolved = resolve_one(None, Some(&dir), "ffmpeg");
+        assert_eq!(resolved, Some(binary));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn uses_explicit_override_when_executable() {
         let file = std::env::temp_dir().join("postcraft-discovery-override");
         std::fs::write(&file, b"").unwrap();
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o755)).unwrap();
-        }
+        make_executable(&file);
         let resolved = resolve_one(Some(file.clone().into_os_string()), None, "ffmpeg");
         assert_eq!(resolved, Some(file));
         let _ = std::fs::remove_file(std::env::temp_dir().join("postcraft-discovery-override"));

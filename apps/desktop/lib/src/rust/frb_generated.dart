@@ -71,7 +71,7 @@ class PostCraftRust
   String get codegenVersion => '2.13.0';
 
   @override
-  int get rustContentHash => 1092786721;
+  int get rustContentHash => 1895317835;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -96,7 +96,10 @@ abstract class PostCraftRustApi extends BaseApi {
 
   Future<bool> crateApiCancelRecording({required int id});
 
-  Future<CaptureResult> crateApiCaptureDesktop({required String mode});
+  Future<CaptureResult> crateApiCaptureDesktop({
+    required String mode,
+    String? targetId,
+  });
 
   Future<String> crateApiCaptureTargetReport();
 
@@ -113,6 +116,10 @@ abstract class PostCraftRustApi extends BaseApi {
   Future<bool> crateApiGlobalShortcutsSupported();
 
   Future<String> crateApiInspectPipewireTransport();
+
+  Future<void> crateApiInstallPanicHook({required String logPath});
+
+  Future<String> crateApiMediaStatus();
 
   Future<ImageOperationResult> crateApiPixelateRegionRgba({
     required int width,
@@ -297,12 +304,16 @@ class PostCraftRustApiImpl extends PostCraftRustApiImplPlatform
       const TaskConstMeta(debugName: "cancel_recording", argNames: ["id"]);
 
   @override
-  Future<CaptureResult> crateApiCaptureDesktop({required String mode}) {
+  Future<CaptureResult> crateApiCaptureDesktop({
+    required String mode,
+    String? targetId,
+  }) {
     return handler.executeNormal(
       NormalTask(
         callFfi: (port_) {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(mode, serializer);
+          sse_encode_opt_String(targetId, serializer);
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
@@ -315,14 +326,16 @@ class PostCraftRustApiImpl extends PostCraftRustApiImplPlatform
           decodeErrorData: sse_decode_native_error,
         ),
         constMeta: kCrateApiCaptureDesktopConstMeta,
-        argValues: [mode],
+        argValues: [mode, targetId],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kCrateApiCaptureDesktopConstMeta =>
-      const TaskConstMeta(debugName: "capture_desktop", argNames: ["mode"]);
+  TaskConstMeta get kCrateApiCaptureDesktopConstMeta => const TaskConstMeta(
+    debugName: "capture_desktop",
+    argNames: ["mode", "targetId"],
+  );
 
   @override
   Future<String> crateApiCaptureTargetReport() {
@@ -482,6 +495,63 @@ class PostCraftRustApiImpl extends PostCraftRustApiImplPlatform
       );
 
   @override
+  Future<void> crateApiInstallPanicHook({required String logPath}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(logPath, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 9,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiInstallPanicHookConstMeta,
+        argValues: [logPath],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiInstallPanicHookConstMeta => const TaskConstMeta(
+    debugName: "install_panic_hook",
+    argNames: ["logPath"],
+  );
+
+  @override
+  Future<String> crateApiMediaStatus() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 10,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiMediaStatusConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiMediaStatusConstMeta =>
+      const TaskConstMeta(debugName: "media_status", argNames: []);
+
+  @override
   Future<ImageOperationResult> crateApiPixelateRegionRgba({
     required int width,
     required int height,
@@ -507,7 +577,7 @@ class PostCraftRustApiImpl extends PostCraftRustApiImplPlatform
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 9,
+            funcId: 11,
             port: port_,
           );
         },
@@ -563,7 +633,7 @@ class PostCraftRustApiImpl extends PostCraftRustApiImplPlatform
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 10,
+            funcId: 12,
             port: port_,
           );
         },
@@ -592,7 +662,7 @@ class PostCraftRustApiImpl extends PostCraftRustApiImplPlatform
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 11,
+            funcId: 13,
             port: port_,
           );
         },
@@ -619,7 +689,7 @@ class PostCraftRustApiImpl extends PostCraftRustApiImplPlatform
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 12,
+            funcId: 14,
             port: port_,
           );
         },
@@ -647,7 +717,7 @@ class PostCraftRustApiImpl extends PostCraftRustApiImplPlatform
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 13,
+            funcId: 15,
             port: port_,
           );
         },
@@ -679,7 +749,7 @@ class PostCraftRustApiImpl extends PostCraftRustApiImplPlatform
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 14,
+            funcId: 16,
             port: port_,
           );
         },
@@ -710,7 +780,7 @@ class PostCraftRustApiImpl extends PostCraftRustApiImplPlatform
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 15,
+            funcId: 17,
             port: port_,
           );
         },
@@ -741,7 +811,7 @@ class PostCraftRustApiImpl extends PostCraftRustApiImplPlatform
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 16,
+            funcId: 18,
             port: port_,
           );
         },
@@ -783,7 +853,7 @@ class PostCraftRustApiImpl extends PostCraftRustApiImplPlatform
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 17,
+            funcId: 19,
             port: port_,
           );
         },
@@ -829,7 +899,7 @@ class PostCraftRustApiImpl extends PostCraftRustApiImplPlatform
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 18,
+            funcId: 20,
             port: port_,
           );
         },
@@ -856,7 +926,7 @@ class PostCraftRustApiImpl extends PostCraftRustApiImplPlatform
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 19,
+            funcId: 21,
             port: port_,
           );
         },
@@ -886,7 +956,7 @@ class PostCraftRustApiImpl extends PostCraftRustApiImplPlatform
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 20,
+            funcId: 22,
             port: port_,
           );
         },
@@ -929,7 +999,7 @@ class PostCraftRustApiImpl extends PostCraftRustApiImplPlatform
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 21,
+            funcId: 23,
             port: port_,
           );
         },
@@ -990,7 +1060,7 @@ class PostCraftRustApiImpl extends PostCraftRustApiImplPlatform
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 22,
+            funcId: 24,
             port: port_,
           );
         },
@@ -1043,7 +1113,7 @@ class PostCraftRustApiImpl extends PostCraftRustApiImplPlatform
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 23,
+            funcId: 25,
             port: port_,
           );
         },
@@ -1073,7 +1143,7 @@ class PostCraftRustApiImpl extends PostCraftRustApiImplPlatform
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 24,
+            funcId: 26,
             port: port_,
           );
         },
@@ -1101,7 +1171,7 @@ class PostCraftRustApiImpl extends PostCraftRustApiImplPlatform
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 25,
+            funcId: 27,
             port: port_,
           );
         },

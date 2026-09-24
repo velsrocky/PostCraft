@@ -11,8 +11,11 @@ class LinuxCaptureService {
   Future<PlatformCapabilities> capabilities() =>
       native_api.platformCapabilities();
 
-  Future<CapturedImage> capture(CaptureMode mode) async {
-    final result = await native_api.captureDesktop(mode: mode.name);
+  Future<CapturedImage> capture(CaptureMode mode, {String? targetId}) async {
+    final result = await native_api.captureDesktop(
+      mode: mode.name,
+      targetId: targetId,
+    );
     final file = File(result.path);
     if (!await file.exists()) {
       throw const FileSystemException('Capture returned a missing image file.');

@@ -13,9 +13,12 @@ class Project {
     required this.height,
     required this.layerCount,
     required this.directoryPath,
+    this.schemaVersion = schemaVersionCurrent,
     this.hasUnsavedDraft = false,
     this.thumbnailPath,
   });
+
+  static const schemaVersionCurrent = 1;
 
   final String id;
   final String name;
@@ -25,6 +28,7 @@ class Project {
   final int height;
   final int layerCount;
   final String directoryPath;
+  final int schemaVersion;
   final bool hasUnsavedDraft;
   final String? thumbnailPath;
 
@@ -48,11 +52,13 @@ class Project {
     height: height ?? this.height,
     layerCount: layerCount ?? this.layerCount,
     directoryPath: directoryPath,
+    schemaVersion: schemaVersion,
     hasUnsavedDraft: hasUnsavedDraft ?? this.hasUnsavedDraft,
     thumbnailPath: thumbnailPath ?? this.thumbnailPath,
   );
 
   Map<String, Object?> toJson() => {
+    'schemaVersion': schemaVersion,
     'id': id,
     'name': name,
     'createdAt': createdAt.toUtc().toIso8601String(),
@@ -81,6 +87,7 @@ class Project {
     final updatedTime = DateTime.tryParse(updated);
     if (createdTime == null || updatedTime == null) return null;
     final thumbnail = json['thumbnailPath'];
+    final schema = json['schemaVersion'];
     return Project(
       id: id,
       name: name,
@@ -90,6 +97,7 @@ class Project {
       height: json['height'] is int ? json['height']! as int : 0,
       layerCount: json['layerCount'] is int ? json['layerCount']! as int : 0,
       directoryPath: directoryPath,
+      schemaVersion: schema is int ? schema : schemaVersionCurrent,
       thumbnailPath: thumbnail is String ? thumbnail : null,
     );
   }

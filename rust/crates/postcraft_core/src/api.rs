@@ -210,8 +210,23 @@ pub fn start_timeline_render_session(
 }
 
 #[flutter_rust_bridge::frb]
-pub fn capture_desktop(mode: String) -> Result<CaptureResult, NativeError> {
-    capture_desktop_impl(mode)
+pub fn capture_desktop(
+    mode: String,
+    target_id: Option<String>,
+) -> Result<CaptureResult, NativeError> {
+    capture_desktop_impl(mode, target_id)
+}
+
+#[flutter_rust_bridge::frb]
+pub fn media_status() -> String {
+    serde_json::to_string(&postcraft_media::media_status()).unwrap_or_else(|_| {
+        "{\"available\":false,\"message\":\"media status serialization failed\"}".to_owned()
+    })
+}
+
+#[flutter_rust_bridge::frb]
+pub fn install_panic_hook(log_path: String) {
+    crate::install_panic_hook(log_path);
 }
 
 #[flutter_rust_bridge::frb]

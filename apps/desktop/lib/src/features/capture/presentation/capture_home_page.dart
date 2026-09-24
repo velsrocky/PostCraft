@@ -71,6 +71,15 @@ class CaptureHomePage extends ConsumerWidget {
                         onPressed: () =>
                             _capture(context, ref, CaptureMode.screen),
                       ),
+                      if (_hasDisplayTargets(ref))
+                        _CaptureAction(
+                          icon: Icons.desktop_windows_outlined,
+                          title: 'Capture display',
+                          subtitle: 'Pick a connected monitor',
+                          enabled: enabled,
+                          onPressed: () =>
+                              _captureDisplay(context, ref),
+                        ),
                       _CaptureAction(
                         icon: Icons.image_outlined,
                         title: 'Open an image',
@@ -79,6 +88,13 @@ class CaptureHomePage extends ConsumerWidget {
                       ),
                     ],
                   ),
+                  if (_hasDisplayTargets(ref)) ...[
+                    const SizedBox(height: 14),
+                    _CapabilityNote(
+                      icon: Icons.info_outline_rounded,
+                      message: _displaySummary(ref),
+                    ),
+                  ],
                   const SizedBox(height: 20),
                   capabilities.when(
                     data: (value) => value.desktopCapture
@@ -117,14 +133,72 @@ class CaptureHomePage extends ConsumerWidget {
     );
   }
 
+  List<Map<String, Object?>> _displayTargets(WidgetRef ref) {
+    final report = ref.watch(captureTargetReportProvider);
+    return report.when(
+      data: (value) => value.targets
+          .where((target) => target['kind'] == 'display')
+          .toList(),
+      error: (_, _) => const [],
+      loading: () => const [],
+    );
+  }
+
+  bool _hasDisplayTargets(WidgetRef ref) => _displayTargets(ref).isNotEmpty;
+
+  String _displaySummary(WidgetRef ref) {
+    final targets = _displayTargets(ref);
+    if (targets.length <= 1) return 'Connected display ready for targeted capture.';
+    final names = targets
+        .map((target) => '${target['name'] ?? target['id'] ?? 'Display'}')
+        .join(', ');
+    return 'Displays: $names';
+  }
+
+  Future<void> _captureDisplay(BuildContext context, WidgetRef ref) async {
+    final targets = _displayTargets(ref);
+    if (targets.isEmpty) return;
+    if (targets.length == 1) {
+      final targetId = targets.first['id']?.toString();
+      await _capture(context, ref, CaptureMode.display, targetId: targetId);
+      return;
+    }
+    final selected = await showDialog<Map<String, Object?>>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: const Text('Capture display'),
+        children: [
+          for (final target in targets)
+            SimpleDialogOption(
+              onPressed: () => Navigator.of(context).pop(target),
+              child: Text(
+                '${target['name'] ?? target['id'] ?? 'Display'}'
+                '${target['width'] != null && target['height'] != null ? ' · ${target['width']}×${target['height']}' : ''}',
+              ),
+            ),
+        ],
+      ),
+    );
+    if (selected == null || !context.mounted) return;
+    await _capture(
+      context,
+      ref,
+      CaptureMode.display,
+      targetId: selected['id']?.toString(),
+    );
+  }
+
   Future<void> _capture(
     BuildContext context,
     WidgetRef ref,
-    CaptureMode mode,
-  ) async {
+    CaptureMode mode, {
+    String? targetId,
+  }) async {
     final messenger = ScaffoldMessenger.of(context);
     try {
-      final result = await ref.read(linuxCaptureServiceProvider).capture(mode);
+      final result = await ref
+          .read(linuxCaptureServiceProvider)
+          .capture(mode, targetId: targetId);
       final image = await _decodeImage(result.bytes);
       ref
           .read(editorControllerProvider.notifier)
@@ -133,22 +207,11 @@ class CaptureHomePage extends ConsumerWidget {
       final document = ref.read(editorControllerProvider).document;
       await ref
           .read(workspaceControllerProvider.notifier)
-          .startProject(
-            document,
-            name: mode == CaptureMode.region
-                ? 'Region capture'
-                : 'Screen capture',
-          );
+          .startProject(document, name: _captureLabel(mode, targetId));
       if (context.mounted) {
         context.go('/editor');
         messenger.showSnackBar(
-          SnackBar(
-            content: Text(
-              mode == CaptureMode.region
-                  ? 'Region captured'
-                  : 'Screen captured',
-            ),
-          ),
+          SnackBar(content: Text('${_captureLabel(mode, targetId)} captured')),
         );
       }
     } on Object catch (error) {
@@ -159,6 +222,13 @@ class CaptureHomePage extends ConsumerWidget {
       }
     }
   }
+
+  String _captureLabel(CaptureMode mode, String? targetId) => switch (mode) {
+    CaptureMode.region => 'Region capture',
+    CaptureMode.screen => 'Screen capture',
+    CaptureMode.display =>
+      targetId == null ? 'Display capture' : 'Display $targetId capture',
+  };
 
   Future<void> _importImage(BuildContext context, WidgetRef ref) async {
     final result = await openImageFile();

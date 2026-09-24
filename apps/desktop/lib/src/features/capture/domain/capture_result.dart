@@ -1,6 +1,6 @@
 import 'dart:typed_data';
 
-enum CaptureMode { region, screen }
+enum CaptureMode { region, screen, display }
 
 class CapturedImage {
   const CapturedImage({

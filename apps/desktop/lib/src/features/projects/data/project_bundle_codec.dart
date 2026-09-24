@@ -15,6 +15,8 @@ import '../../editor/domain/editor_document.dart';
 class ProjectBundleCodec {
   const ProjectBundleCodec._();
 
+  /// The format version written by [encode]; bump only alongside a migration
+  /// step registered in [_migrationSteps] and a matching reader update.
   static const formatVersion = 1;
   static const manifestPath = 'manifest.json';
   static const sourceMediaPath = 'media/source-image.bin';
@@ -22,6 +24,47 @@ class ProjectBundleCodec {
   static const maxManifestBytes = 16 * 1024 * 1024;
   static const maxSourceBytes = 500 * 1024 * 1024;
   static const maxEntries = 16;
+
+  /// Sequential upgrades keyed by the version they read; the value rewrites a
+  /// manifest from `N` to `N + 1`. Empty while [formatVersion] is 1 — future
+  /// steps slot in here (e.g. `1: _manifestV1ToV2`) without touching callers.
+  static final Map<int, Map<String, Object?> Function(Map<String, Object?>)>
+  _migrationSteps =
+      <int, Map<String, Object?> Function(Map<String, Object?>)>{};
+
+  /// Runs the sequential migration chain until the manifest reaches
+  /// [formatVersion], returning it unchanged when already current.
+  static Map<String, Object?> migrateManifest(Map<String, Object?> manifest) {
+    final raw = manifest['formatVersion'];
+    if (raw == null) {
+      throw const FormatException(
+        'Project manifest is missing formatVersion; unsupported PostCraft project format.',
+      );
+    }
+    if (raw is! int) {
+      throw const FormatException(
+        'Project manifest has an invalid formatVersion; unsupported PostCraft project format.',
+      );
+    }
+    var version = raw;
+    var migrated = manifest;
+    while (version < formatVersion) {
+      final step = _migrationSteps[version];
+      if (step == null) {
+        throw FormatException(
+          'Unsupported PostCraft project format: no migration from formatVersion $version.',
+        );
+      }
+      migrated = step(migrated);
+      version += 1;
+    }
+    if (version > formatVersion) {
+      throw FormatException(
+        'Unsupported PostCraft project format: formatVersion $version is newer than supported $formatVersion.',
+      );
+    }
+    return migrated;
+  }
 
   static Uint8List encode(EditorDocument document, {String name = 'Untitled'}) {
     validateDocument(document);
@@ -99,11 +142,11 @@ class ProjectBundleCodec {
       throw const FormatException('Project manifest exceeds the 16 MiB limit.');
     }
     final decoded = jsonDecode(utf8.decode(manifest.content as List<int>));
-    if (decoded is! Map<String, dynamic> ||
-        decoded['formatVersion'] != formatVersion) {
+    if (decoded is! Map<String, dynamic>) {
       throw const FormatException('Unsupported PostCraft project format.');
     }
-    final document = decoded['document'];
+    final migrated = migrateManifest(decoded);
+    final document = migrated['document'];
     if (document is! Map<String, dynamic>) {
       throw const FormatException(
         'The project does not contain an editable document.',

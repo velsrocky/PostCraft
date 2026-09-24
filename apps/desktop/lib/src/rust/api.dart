@@ -122,8 +122,19 @@ Future<int> startTimelineRenderSession({
   crf: crf,
 );
 
-Future<CaptureResult> captureDesktop({required String mode}) =>
-    PostCraftRust.instance.api.crateApiCaptureDesktop(mode: mode);
+Future<CaptureResult> captureDesktop({
+  required String mode,
+  String? targetId,
+}) => PostCraftRust.instance.api.crateApiCaptureDesktop(
+  mode: mode,
+  targetId: targetId,
+);
+
+Future<String> mediaStatus() =>
+    PostCraftRust.instance.api.crateApiMediaStatus();
+
+Future<void> installPanicHook({required String logPath}) =>
+    PostCraftRust.instance.api.crateApiInstallPanicHook(logPath: logPath);
 
 Future<ImageOperationResult> pixelateRgba({
   required int width,

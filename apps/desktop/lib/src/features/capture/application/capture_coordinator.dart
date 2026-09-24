@@ -13,7 +13,7 @@ import '../domain/capture_result.dart';
 
 /// A context-free capture entry point.
 abstract interface class CaptureRunner {
-  Future<void> run(CaptureMode mode);
+  Future<void> run(CaptureMode mode, {String? targetId});
 }
 
 /// Portal-driven capture that runs without a [BuildContext].
@@ -26,13 +26,17 @@ class CaptureCoordinator implements CaptureRunner {
   final Ref _ref;
 
   @override
-  Future<void> run(CaptureMode mode) async {
+  Future<void> run(CaptureMode mode, {String? targetId}) async {
     final feedback = _ref.read(feedbackProvider.notifier);
-    final label = mode == CaptureMode.region ? 'Region' : 'Screen';
+    final label = switch (mode) {
+      CaptureMode.region => 'Region',
+      CaptureMode.screen => 'Screen',
+      CaptureMode.display => 'Display',
+    };
     try {
       final capture = await _ref
           .read(linuxCaptureServiceProvider)
-          .capture(mode);
+          .capture(mode, targetId: targetId);
       final image = await _decode(capture.bytes);
       _ref
           .read(editorControllerProvider.notifier)

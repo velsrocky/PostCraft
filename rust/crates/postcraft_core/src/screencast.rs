@@ -1,5 +1,6 @@
 use crate::NativeError;
 use serde::{Deserialize, Serialize};
+#[cfg(target_os = "linux")]
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -218,11 +219,6 @@ fn pipewire_runtime_available() -> bool {
         .is_ok_and(|output| output.status.success())
 }
 
-#[cfg(not(target_os = "linux"))]
-fn pipewire_runtime_available() -> bool {
-    false
-}
-
 #[cfg(target_os = "linux")]
 fn pipewire_development_available() -> bool {
     std::process::Command::new("pkg-config")
@@ -231,11 +227,7 @@ fn pipewire_development_available() -> bool {
         .is_ok_and(|status| status.success())
 }
 
-#[cfg(not(target_os = "linux"))]
-fn pipewire_development_available() -> bool {
-    false
-}
-
+#[cfg(target_os = "linux")]
 fn backend(message: impl Into<String>) -> NativeError {
     NativeError {
         code: "screencast_backend_failed".into(),
@@ -243,6 +235,7 @@ fn backend(message: impl Into<String>) -> NativeError {
     }
 }
 
+#[cfg(target_os = "linux")]
 fn cancelled_or_failed(status: u32, operation: &str) -> NativeError {
     NativeError {
         code: if status == 1 {

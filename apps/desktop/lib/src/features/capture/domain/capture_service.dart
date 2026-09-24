@@ -11,7 +11,7 @@ class CaptureCapability {
 
 abstract interface class CaptureService {
   Future<PlatformCapabilities> capabilities();
-  Future<CapturedImage> capture(CaptureMode mode);
+  Future<CapturedImage> capture(CaptureMode mode, {String? targetId});
 }
 
 abstract interface class RecordingService {

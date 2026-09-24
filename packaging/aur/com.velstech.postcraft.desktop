@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=PostCraft
+Comment=Local-first screenshot annotation and media studio
+Exec=postcraft
+Icon=com.velstech.postcraft
+Terminal=false
+Categories=Graphics;Photography;AudioVideo;
+StartupWMClass=postcraft

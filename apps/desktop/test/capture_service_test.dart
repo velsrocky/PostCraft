@@ -129,8 +129,18 @@ class _FakeCaptureApi extends PostCraftRustApi {
   Future<String> crateApiStopRecording({required int id}) async => throw UnimplementedError();
 
   @override
-  Future<CaptureResult> crateApiCaptureDesktop({required String mode}) async =>
+  Future<CaptureResult> crateApiCaptureDesktop({
+    required String mode,
+    String? targetId,
+  }) async =>
       CaptureResult(path: path, mode: mode);
+
+  @override
+  Future<String> crateApiMediaStatus() async =>
+      '{"available":false,"message":"test"}';
+
+  @override
+  Future<void> crateApiInstallPanicHook({required String logPath}) async {}
 
   @override
   Future<bool> crateApiGlobalShortcutsSupported() async => false;

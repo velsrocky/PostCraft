@@ -4,7 +4,7 @@ PostCraft is a local-first desktop app for screenshot capture, visual annotation
 
 ## Current working slice
 
-> **Platform status:** PostCraft's capture, global shortcuts, and media recording features are implemented for **Linux** via the Freedesktop XDG portals (Screenshot, GlobalShortcuts, ScreenCast) and PipeWire. The Flutter shell and editor build and run on macOS and Windows, but capture, global shortcuts, and recording backends are **Linux-only** in this release. Window capture, multi-display enumeration, and social sharing remain follow-on work across all platforms.
+> **Platform status:** Capture, global shortcuts, multi-display targeting, and media recording are implemented for **Linux** (XDG portals + X11 xrandr) and compiled for **Windows/macOS** (GDI/CoreGraphics + FFmpeg gdigrab/avfoundation), with Linux as the primary verified ship target. Interactive window stills, system/microphone audio, and social OAuth share remain follow-on work. Local share (copy/save/open folder) ships now.
 
 - Dark Flutter Material 3 workspace for Linux, Windows, and macOS.
 - Feature-routed shell: editor, projects, library, templates, settings.
@@ -14,13 +14,17 @@ PostCraft is a local-first desktop app for screenshot capture, visual annotation
 - PNG export and native image clipboard copy.
 - Rust core over generated `flutter_rust_bridge` bindings; region pixelation and Gaussian blur for final export redaction.
 - Linux CMake target builds and bundles the Rust shared library as part of the desktop app.
-- Linux region and full-screen capture through the XDG Screenshot portal, when available.
+- Linux region and full-screen capture through the XDG Screenshot portal, when available; multi-display picker on X11.
 - Local project library: captures/imports become durable projects; recents list with thumbnails, open, and delete.
 - Debounced autosave to a recoverable draft, plus explicit save; interrupted sessions surface a recovery prompt.
 - Opt-in system-wide capture shortcuts (Ctrl+Shift+A / F) via the XDG GlobalShortcuts portal, enabled from Settings.
 - Content-addressed **media library**: captures/imports are indexed and browsable with search, kind filters, tags, open-in-editor, and delete. Video posters and audio waveforms are generated through the native FFmpeg worker.
+- **Templates** apply starter documents into a new project; studio timeline supports trim and split; Export offers local share destinations (copy PNG, save, copy path, open folder).
+- Crash/error logs with rotation, bundle migration runner scaffold, Settings update check against GitHub Releases.
 
-The capture integration uses the Freedesktop XDG Screenshot portal on Linux (desktop-controlled, Wayland-friendly; behavior depends on the portal backend). Global shortcuts are off by default and register through the portal when enabled, so enabling never triggers an unexpected consent prompt; when the desktop does not advertise GlobalShortcuts support the toggle is disabled. The same shortcuts also work while the editor is focused without enabling the portal. Recording, timeline/FFmpeg editing, provider-based social sharing, plugins, and window/multi-monitor capture remain follow-on work.
+The capture integration uses the Freedesktop XDG Screenshot portal on Linux (desktop-controlled, Wayland-friendly; behavior depends on the portal backend). Global shortcuts are off by default and register through the portal when enabled, so enabling never triggers an unexpected consent prompt; when the desktop does not advertise GlobalShortcuts support the toggle is disabled. The same shortcuts also work while the editor is focused without enabling the portal. Interactive window stills, system/microphone audio, and OAuth social providers remain follow-on work. Packaging notes: `packaging/DISTRIBUTION.md` (GitHub Releases, AUR, AppImageHub).
+
+**FFmpeg/ffprobe are required on `PATH`** (or pointed at with `POSTCRAFT_FFMPEG` / `POSTCRAFT_FFPROBE`) for screen recording, timeline render, video posters, and audio waveforms. PostCraft does not bundle FFmpeg — install it from your distribution (see `docs/release/linux.md`).
 
 ## Persistence and the Isar decision
 
@@ -34,6 +38,7 @@ The vision specified Isar as the local metadata store. The pinned `isar_generato
 - `flutter_rust_bridge_codegen` 2.13.0 for regenerating the bridge
 - Linux desktop: GTK 3 development packages, CMake, Ninja, pkg-config
 - Windows/macOS: Flutter desktop build prerequisites for the target OS
+- Runtime media features (recording, timeline render, video posters, audio waveforms): **FFmpeg and ffprobe on `PATH`**, or `POSTCRAFT_FFMPEG` / `POSTCRAFT_FFPROBE` overrides. PostCraft does not bundle FFmpeg.
 
 ## Run on Linux
 
@@ -65,9 +70,9 @@ make validate-linux-bundle
 ```
 
 Linux release packaging and runtime requirements are documented in
-`docs/release/linux.md`. The current release artifact is a validated x86_64
-bundle; it is not yet a signed distribution package and does not bundle
-FFmpeg.
+`docs/release/linux.md`. Distribution steps (GitHub Releases, AUR, AppImageHub)
+are in `packaging/DISTRIBUTION.md`. The signed AppImage pipeline does not
+bundle FFmpeg.
 
 Regenerate bindings after editing `rust/crates/postcraft_core/src/api.rs`:
 

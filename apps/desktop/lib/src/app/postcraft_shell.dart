@@ -1,8 +1,15 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../core/feedback.dart';
+import '../features/editor/application/editor_controller.dart';
+import '../features/export/document_renderer.dart';
+import '../features/projects/application/projects_providers.dart';
+import '../features/share/application/share_providers.dart';
+import '../features/share/domain/share_provider.dart';
 import 'theme.dart';
 
 class PostCraftShell extends ConsumerWidget {
@@ -37,6 +44,11 @@ class PostCraftShell extends ConsumerWidget {
       ).showSnackBar(SnackBar(content: Text(next.$1)));
     });
 
+    final workspace = ref.watch(workspaceControllerProvider);
+    final canExport =
+        (location == '/workspace' || location == '/editor') &&
+        workspace.hasProject;
+
     return Scaffold(
       body: Row(
         children: [
@@ -44,7 +56,13 @@ class PostCraftShell extends ConsumerWidget {
           Expanded(
             child: Column(
               children: [
-                _TitleBar(location: location),
+                _TitleBar(
+                  location: location,
+                  canExport: canExport,
+                  onExport: canExport
+                      ? () => _openShareSheet(context, ref)
+                      : null,
+                ),
                 Expanded(child: child),
               ],
             ),
@@ -52,6 +70,53 @@ class PostCraftShell extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  Future<void> _openShareSheet(BuildContext context, WidgetRef ref) async {
+    final document = ref.read(editorControllerProvider).document;
+    final workspace = ref.read(workspaceControllerProvider);
+    final messenger = ScaffoldMessenger.of(context);
+    Uint8List? png;
+    try {
+      png = await const DocumentRenderer().renderPng(document);
+    } on Object catch (error) {
+      messenger.showSnackBar(SnackBar(content: Text('Export failed: $error')));
+      return;
+    }
+    if (!context.mounted) return;
+    final payload = SharePayload(
+      pngBytes: png,
+      filePath: workspace.current?.bundlePath,
+      title: workspace.current?.name ?? 'PostCraft',
+    );
+    final destinations = ref.read(shareDestinationsProvider);
+    final selected = await showModalBottomSheet<ShareDestination>(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 18, 20, 8),
+              child: Text(
+                'Share & export',
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+              ),
+            ),
+            for (final destination in destinations)
+              ListTile(
+                leading: Icon(destination.icon, size: 20),
+                title: Text(destination.label),
+                onTap: () => Navigator.of(sheetContext).pop(destination),
+              ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+    if (selected == null || !context.mounted) return;
+    await runShare(context, selected, payload);
   }
 }
 
@@ -188,8 +253,14 @@ class _NavButton extends StatelessWidget {
 }
 
 class _TitleBar extends StatelessWidget {
-  const _TitleBar({required this.location});
+  const _TitleBar({
+    required this.location,
+    required this.canExport,
+    required this.onExport,
+  });
   final String location;
+  final bool canExport;
+  final VoidCallback? onExport;
 
   @override
   Widget build(BuildContext context) {
@@ -224,7 +295,7 @@ class _TitleBar extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           FilledButton.icon(
-            onPressed: location == '/workspace' ? () {} : null,
+            onPressed: onExport,
             icon: const Icon(Icons.ios_share_rounded, size: 16),
             label: const Text('Export'),
             style: FilledButton.styleFrom(

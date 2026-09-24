@@ -1,6 +1,12 @@
 // `PostCraft`'s native API. Keep bridge methods small, validated, and deterministic.
 
 pub mod api;
+#[cfg(target_os = "macos")]
+#[allow(unsafe_code)]
+mod capture_macos;
+#[cfg(target_os = "windows")]
+#[allow(unsafe_code)]
+mod capture_windows;
 #[allow(unsafe_code)]
 mod frb_generated;
 mod global_shortcuts;
@@ -90,32 +96,48 @@ pub fn runtime_info() -> RuntimeInfo {
 /// Reports the native backend surface. Capture providers are implemented per OS as they are brought online.
 pub fn platform_capabilities() -> PlatformCapabilities {
     #[cfg(target_os = "linux")]
-    let desktop_capture = screenshot_portal_available();
-    #[cfg(target_os = "linux")]
-    let global_shortcuts = global_shortcuts::portal_supported();
-    #[cfg(not(target_os = "linux"))]
-    let (desktop_capture, global_shortcuts) = (false, false);
+    let (desktop_capture, global_shortcuts, window_capture) = (
+        screenshot_portal_available(),
+        global_shortcuts::portal_supported(),
+        false,
+    );
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
+    let (desktop_capture, global_shortcuts, window_capture) = (true, false, true);
+    #[cfg(not(any(target_os = "linux", target_os = "windows", target_os = "macos")))]
+    let (desktop_capture, global_shortcuts, window_capture) = (false, false, false);
 
     let session_type = std::env::var("XDG_SESSION_TYPE").unwrap_or_default();
     let wayland_screencast =
         session_type.eq_ignore_ascii_case("wayland") && screencast_portal_available();
+
+    #[cfg(target_os = "linux")]
+    let capture_reason = if wayland_screencast {
+        "Wayland ScreenCast portal is present; target selection requires a portal session."
+            .to_owned()
+    } else if session_type.eq_ignore_ascii_case("wayland") {
+        "Wayland ScreenCast portal is unavailable in this session.".to_owned()
+    } else {
+        "X11 screen, display, and region capture via the Screenshot portal; window capture is not implemented (use region capture)."
+            .to_owned()
+    };
+    #[cfg(target_os = "windows")]
+    let capture_reason = "Full-desktop, per-display, and window capture via GDI; region capture returns the full desktop until interactive selection ships."
+        .to_owned();
+    #[cfg(target_os = "macos")]
+    let capture_reason = "Display and window capture via CoreGraphics; region capture returns the full desktop until interactive selection ships, and Screen Recording permission is required."
+        .to_owned();
+    #[cfg(not(any(target_os = "linux", target_os = "windows", target_os = "macos")))]
+    let capture_reason = "No capture adapter exists for this platform.".to_owned();
+
     PlatformCapabilities {
         desktop_capture,
-        window_capture: false,
+        window_capture,
         system_audio_capture: false,
         global_shortcuts,
-        clipboard_image_write: false,
+        clipboard_image_write: true,
         wayland_screencast,
         microphone_capture: false,
-        capture_reason: if wayland_screencast {
-            "Wayland ScreenCast portal is present; target selection requires a portal session."
-                .to_owned()
-        } else if session_type.eq_ignore_ascii_case("wayland") {
-            "Wayland ScreenCast portal is unavailable in this session.".to_owned()
-        } else {
-            "Window and multi-display target enumeration is not available in the current adapter."
-                .to_owned()
-        },
+        capture_reason,
     }
 }
 
@@ -162,17 +184,59 @@ fn screenshot_portal_version() -> Option<u32> {
     None
 }
 
+const CAPTURE_MODES: [&str; 4] = ["region", "screen", "display", "window"];
+
+fn validate_capture_mode(mode: &str) -> Result<(), NativeError> {
+    if CAPTURE_MODES.contains(&mode) {
+        Ok(())
+    } else {
+        Err(NativeError::invalid(
+            "capture mode must be region, screen, display, or window",
+        ))
+    }
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+fn window_capture_unsupported() -> NativeError {
+    NativeError {
+        code: "window_capture_interactive_unsupported".to_owned(),
+        message:
+            "Window capture is not implemented; use region capture and select the window area."
+                .to_owned(),
+    }
+}
+
 #[cfg(target_os = "linux")]
-pub fn capture_desktop(mode: String) -> Result<CaptureResult, NativeError> {
-    if mode != "region" && mode != "screen" {
-        return Err(NativeError::invalid(
-            "capture mode must be region or screen",
-        ));
+pub fn capture_desktop(
+    mode: String,
+    target_id: Option<String>,
+) -> Result<CaptureResult, NativeError> {
+    validate_capture_mode(&mode)?;
+    if mode == "window" {
+        return Err(window_capture_unsupported());
     }
     if !screenshot_portal_available() {
         return Err(NativeError {
             code: "capture_unsupported".to_owned(),
             message: "The Freedesktop Screenshot portal is unavailable in this session.".to_owned(),
+        });
+    }
+
+    let wayland_session = std::env::var("XDG_SESSION_TYPE")
+        .unwrap_or_default()
+        .eq_ignore_ascii_case("wayland");
+    let display_geometry = if mode == "display" && !wayland_session {
+        resolve_display_geometry(target_id.as_deref())
+    } else {
+        None
+    };
+    if mode == "display" && !wayland_session && target_id.is_some() && display_geometry.is_none() {
+        return Err(NativeError {
+            code: "display_target_unavailable".to_owned(),
+            message: format!(
+                "Display '{}' is not reported by xrandr.",
+                target_id.as_deref().unwrap_or_default()
+            ),
         });
     }
 
@@ -294,7 +358,7 @@ pub fn capture_desktop(mode: String) -> Result<CaptureResult, NativeError> {
             code: "capture_failed".to_owned(),
             message: "Desktop screenshot response has no image URI.".to_owned(),
         })?;
-    let captured_path = file_uri_to_path(&uri).ok_or_else(|| NativeError {
+    let mut captured_path = file_uri_to_path(&uri).ok_or_else(|| NativeError {
         code: "capture_failed".to_owned(),
         message: "Desktop returned an unsupported screenshot URI.".to_owned(),
     })?;
@@ -308,17 +372,132 @@ pub fn capture_desktop(mode: String) -> Result<CaptureResult, NativeError> {
             message: "Screenshot file is empty or exceeds the supported size.".to_owned(),
         });
     }
+    if let Some(geometry) = display_geometry {
+        captured_path = crop_capture_to_geometry(&captured_path, &geometry)?;
+    }
     Ok(CaptureResult {
         path: captured_path.to_string_lossy().into_owned(),
         mode,
     })
 }
 
-#[cfg(target_os = "linux")]
 fn unique_capture_token() -> u64 {
     use std::sync::atomic::{AtomicU64, Ordering};
     static NEXT_TOKEN: AtomicU64 = AtomicU64::new(1);
     NEXT_TOKEN.fetch_add(1, Ordering::Relaxed)
+}
+
+fn capture_output_path(suffix: &str) -> std::path::PathBuf {
+    std::env::temp_dir().join(format!(
+        "postcraft-capture-{}-{}{suffix}",
+        std::process::id(),
+        unique_capture_token()
+    ))
+}
+
+/// Encodes tightly packed RGBA8 pixels as a PNG byte stream.
+fn encode_png_rgba(width: u32, height: u32, rgba: &[u8]) -> Result<Vec<u8>, String> {
+    let expected = usize::try_from(u64::from(width) * u64::from(height) * 4)
+        .map_err(|_| "image buffer size overflows this platform".to_owned())?;
+    if rgba.len() != expected {
+        return Err(format!(
+            "RGBA buffer length mismatch: expected {expected}, received {}",
+            rgba.len()
+        ));
+    }
+    let mut encoded = Vec::new();
+    {
+        let mut encoder = png::Encoder::new(&mut encoded, width, height);
+        encoder.set_color(png::ColorType::Rgba);
+        encoder.set_depth(png::BitDepth::Eight);
+        let mut writer = encoder.write_header().map_err(|error| error.to_string())?;
+        writer
+            .write_image_data(rgba)
+            .map_err(|error| error.to_string())?;
+    }
+    Ok(encoded)
+}
+
+/// Decodes a PNG into tightly packed RGBA8 pixels.
+#[cfg(target_os = "linux")]
+fn decode_png_rgba(path: &std::path::Path) -> Result<(u32, u32, Vec<u8>), String> {
+    use std::io::BufReader;
+    let file = std::fs::File::open(path).map_err(|error| error.to_string())?;
+    let mut decoder = png::Decoder::new(BufReader::new(file));
+    decoder.set_transformations(png::Transformations::EXPAND | png::Transformations::STRIP_16);
+    let mut reader = decoder.read_info().map_err(|error| error.to_string())?;
+    let mut buffer = vec![0_u8; reader.output_buffer_size()];
+    let info = reader
+        .next_frame(&mut buffer)
+        .map_err(|error| error.to_string())?;
+    let width = info.width;
+    let height = info.height;
+    let bytes = &buffer[..info.buffer_size()];
+    let rgba = match info.color_type {
+        png::ColorType::Rgba => bytes.to_vec(),
+        png::ColorType::Rgb => {
+            let mut rgba = Vec::with_capacity(bytes.len() / 3 * 4);
+            for pixel in bytes.chunks_exact(3) {
+                rgba.extend_from_slice(pixel);
+                rgba.push(255);
+            }
+            rgba
+        }
+        png::ColorType::Grayscale => {
+            let mut rgba = Vec::with_capacity(bytes.len() * 4);
+            for value in bytes {
+                rgba.extend_from_slice(&[*value, *value, *value, 255]);
+            }
+            rgba
+        }
+        png::ColorType::GrayscaleAlpha => {
+            let mut rgba = Vec::with_capacity(bytes.len() * 2);
+            for pixel in bytes.chunks_exact(2) {
+                rgba.extend_from_slice(&[pixel[0], pixel[0], pixel[0], pixel[1]]);
+            }
+            rgba
+        }
+        png::ColorType::Indexed => {
+            return Err("indexed screenshots are not supported after EXPAND".to_owned());
+        }
+    };
+    Ok((width, height, rgba))
+}
+
+pub fn install_panic_hook(log_path: String) {
+    let mut paths: Vec<std::path::PathBuf> = Vec::new();
+    if !log_path.trim().is_empty() {
+        paths.push(std::path::PathBuf::from(&log_path));
+    }
+    let fallback = std::env::temp_dir().join("postcraft-panic.log");
+    if !paths.contains(&fallback) {
+        paths.push(fallback);
+    }
+    std::panic::set_hook(Box::new(move |info| {
+        let payload = info.payload();
+        let message = if let Some(text) = payload.downcast_ref::<&str>() {
+            (*text).to_owned()
+        } else if let Some(text) = payload.downcast_ref::<String>() {
+            text.clone()
+        } else {
+            "panic payload was not a string".to_owned()
+        };
+        let location = info
+            .location()
+            .map(|location| format!(" at {location}"))
+            .unwrap_or_default();
+        let entry = format!("postcraft panic{location}: {message}\n");
+        use std::io::Write;
+        for path in &paths {
+            if let Ok(mut file) = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(path)
+            {
+                let _ = file.write_all(entry.as_bytes());
+            }
+        }
+    }));
 }
 
 #[cfg(target_os = "linux")]
@@ -346,17 +525,198 @@ fn file_uri_to_path(uri: &str) -> Option<std::path::PathBuf> {
     Some(std::path::PathBuf::from(String::from_utf8(decoded).ok()?))
 }
 
-#[cfg(test)]
+#[cfg(target_os = "linux")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct DisplayGeometry {
+    x: i32,
+    y: i32,
+    width: u32,
+    height: u32,
+}
+
+#[cfg(target_os = "linux")]
+fn parse_display_offsets(offsets: &str) -> Option<(i32, i32)> {
+    let mut values = Vec::with_capacity(2);
+    let bytes = offsets.as_bytes();
+    let mut index = 0;
+    while index < bytes.len() && values.len() < 2 {
+        let mut sign = 1_i32;
+        if bytes[index] == b'+' {
+            index += 1;
+            continue;
+        }
+        if bytes[index] == b'-' {
+            sign = -1;
+            index += 1;
+        }
+        let start = index;
+        while index < bytes.len() && bytes[index].is_ascii_digit() {
+            index += 1;
+        }
+        if start == index {
+            return None;
+        }
+        let digits: i32 = offsets[start..index].parse().ok()?;
+        values.push(sign * digits);
+    }
+    match values.as_slice() {
+        [x, y] => Some((*x, *y)),
+        _ => None,
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn parse_display_geometry(token: &str) -> Option<(u32, u32, i32, i32)> {
+    let (width, rest) = token.split_once('x')?;
+    let width: u32 = width.parse().ok()?;
+    let offset_start = rest.find(['+', '-'])?;
+    let height: u32 = rest[..offset_start].parse().ok()?;
+    let (x, y) = parse_display_offsets(&rest[offset_start..])?;
+    Some((width, height, x, y))
+}
+
+#[cfg(target_os = "linux")]
+fn parse_connected_displays(text: &str) -> Vec<(String, bool, DisplayGeometry)> {
+    let mut displays = Vec::new();
+    for line in text.lines() {
+        let parts = line.split_whitespace().collect::<Vec<_>>();
+        if parts.len() < 3 || parts[1] != "connected" {
+            continue;
+        }
+        let primary = parts[2] == "primary";
+        let Some((width, height, x, y)) = parts
+            .iter()
+            .skip(2)
+            .find_map(|part| parse_display_geometry(part))
+        else {
+            continue;
+        };
+        displays.push((
+            parts[0].to_owned(),
+            primary,
+            DisplayGeometry {
+                x,
+                y,
+                width,
+                height,
+            },
+        ));
+    }
+    displays
+}
+
+#[cfg(target_os = "linux")]
+fn resolve_display_geometry(target_id: Option<&str>) -> Option<DisplayGeometry> {
+    let output = std::process::Command::new("xrandr")
+        .arg("--query")
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let text = String::from_utf8_lossy(&output.stdout);
+    let displays = parse_connected_displays(&text);
+    if let Some(target_id) = target_id {
+        return displays
+            .into_iter()
+            .find(|(name, _, _)| name == target_id)
+            .map(|(_, _, geometry)| geometry);
+    }
+    displays
+        .iter()
+        .find(|(_, primary, _)| *primary)
+        .or_else(|| displays.first())
+        .map(|(_, _, geometry)| *geometry)
+}
+
+#[cfg(target_os = "linux")]
+fn crop_capture_to_geometry(
+    input: &std::path::Path,
+    geometry: &DisplayGeometry,
+) -> Result<std::path::PathBuf, NativeError> {
+    let (image_width, image_height, rgba) =
+        decode_png_rgba(input).map_err(|error| NativeError {
+            code: "display_crop_failed".to_owned(),
+            message: format!("Screenshot could not be decoded for display cropping: {error}"),
+        })?;
+    let left = geometry.x.max(0).min(image_width as i32) as u32;
+    let top = geometry.y.max(0).min(image_height as i32) as u32;
+    let right = geometry
+        .x
+        .saturating_add(geometry.width as i32)
+        .clamp(0, image_width as i32) as u32;
+    let bottom = geometry
+        .y
+        .saturating_add(geometry.height as i32)
+        .clamp(0, image_height as i32) as u32;
+    if right <= left || bottom <= top {
+        return Err(NativeError {
+            code: "display_target_unavailable".to_owned(),
+            message: "The selected display lies outside the captured screenshot.".to_owned(),
+        });
+    }
+    if left == 0 && top == 0 && right == image_width && bottom == image_height {
+        return Ok(input.to_path_buf());
+    }
+    let crop_width = right - left;
+    let crop_height = bottom - top;
+    let mut cropped = vec![0_u8; (crop_width * crop_height * 4) as usize];
+    let source_stride = image_width as usize * 4;
+    for row in 0..crop_height as usize {
+        let source_start = (top as usize + row) * source_stride + left as usize * 4;
+        let target_start = row * crop_width as usize * 4;
+        cropped[target_start..target_start + crop_width as usize * 4]
+            .copy_from_slice(&rgba[source_start..source_start + crop_width as usize * 4]);
+    }
+    let encoded =
+        encode_png_rgba(crop_width, crop_height, &cropped).map_err(|error| NativeError {
+            code: "display_crop_failed".to_owned(),
+            message: format!("Cropped screenshot could not be encoded: {error}"),
+        })?;
+    let output = capture_output_path("-display.png");
+    std::fs::write(&output, encoded).map_err(|error| NativeError {
+        code: "display_crop_failed".to_owned(),
+        message: format!("Cropped screenshot could not be written: {error}"),
+    })?;
+    Ok(output)
+}
+
+#[cfg(all(test, target_os = "linux"))]
 mod linux_capture_tests {
-    use super::{file_uri_to_path, platform_capabilities};
+    use super::{file_uri_to_path, parse_connected_displays, platform_capabilities};
 
     #[test]
     fn reports_definitively_unsupported_capabilities() {
         let capabilities = platform_capabilities();
         assert!(!capabilities.window_capture);
         assert!(!capabilities.system_audio_capture);
+        assert!(!capabilities.microphone_capture);
+        assert!(capabilities.clipboard_image_write);
         // desktop_capture / global_shortcuts depend on the active desktop
         // portal, so they are not asserted here.
+    }
+
+    #[test]
+    fn parses_xrandr_display_geometry() {
+        let text = "\
+eDP-1 connected primary 1920x1080+0+0 (normal left inverted right) 344mm x 194mm
+HDMI-1 connected 2560x1440+1920+0 (normal left inverted right) 597mm x 336mm
+DP-2 connected 1920x1080-1920+0 (normal left inverted right) 509mm x 286mm
+DP-4 connected 1920x1080+-1920+-100 (normal left inverted right) 509mm x 286mm
+DP-3 disconnected (normal left inverted right x axis y axis)
+";
+        let displays = parse_connected_displays(text);
+        assert_eq!(displays.len(), 4);
+        assert_eq!(displays[0].0, "eDP-1");
+        assert!(displays[0].1);
+        assert_eq!(displays[0].2.width, 1920);
+        assert_eq!(displays[0].2.x, 0);
+        assert_eq!(displays[1].2.x, 1920);
+        assert_eq!(displays[1].2.height, 1440);
+        assert!(!displays[1].1);
+        assert_eq!(displays[2].2.x, -1920);
+        assert_eq!(displays[3].2.x, -1920);
+        assert_eq!(displays[3].2.y, -100);
     }
 
     #[test]
@@ -376,8 +736,33 @@ mod linux_capture_tests {
     }
 }
 
-#[cfg(not(target_os = "linux"))]
-pub fn capture_desktop(_mode: String) -> Result<CaptureResult, NativeError> {
+#[cfg(target_os = "windows")]
+pub fn capture_desktop(
+    mode: String,
+    target_id: Option<String>,
+) -> Result<CaptureResult, NativeError> {
+    validate_capture_mode(&mode)?;
+    capture_windows::capture(&mode, target_id.as_deref())
+}
+
+#[cfg(target_os = "macos")]
+pub fn capture_desktop(
+    mode: String,
+    target_id: Option<String>,
+) -> Result<CaptureResult, NativeError> {
+    validate_capture_mode(&mode)?;
+    capture_macos::capture(&mode, target_id.as_deref())
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "windows", target_os = "macos")))]
+pub fn capture_desktop(
+    mode: String,
+    _target_id: Option<String>,
+) -> Result<CaptureResult, NativeError> {
+    validate_capture_mode(&mode)?;
+    if mode == "window" {
+        return Err(window_capture_unsupported());
+    }
     Err(NativeError {
         code: "capture_unsupported".to_owned(),
         message: "Desktop capture is not available on this platform yet.".to_owned(),

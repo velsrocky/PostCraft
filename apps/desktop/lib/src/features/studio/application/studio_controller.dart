@@ -79,14 +79,52 @@ class StudioController extends Notifier<Timeline> {
   }
 
   void trimClip(String clipId, {required int sourceInUs, required int sourceOutUs}) {
+    if (sourceInUs < 0 || sourceOutUs <= sourceInUs) {
+      throw ArgumentError('Trim range must satisfy 0 <= sourceInUs < sourceOutUs.');
+    }
+    var found = false;
     final tracks = state.tracks.map((track) {
       final clips = track.clips.map((clip) {
         if (clip.id != clipId) return clip;
-        final next = clip.copyWith(sourceInUs: sourceInUs, sourceOutUs: sourceOutUs);
-        return next.copyWith(startUs: clip.startUs);
+        found = true;
+        return clip.copyWith(sourceInUs: sourceInUs, sourceOutUs: sourceOutUs);
       }).toList();
       return TimelineTrack(id: track.id, name: track.name, clips: clips);
     }).toList();
+    if (!found) return;
+    _commit(Timeline(tracks: tracks));
+  }
+
+  void splitClip(String clipId, int atUs) {
+    var found = false;
+    final tracks = <TimelineTrack>[];
+    for (final track in state.tracks) {
+      final clips = <TimelineClip>[];
+      for (final clip in track.clips) {
+        if (clip.id != clipId) {
+          clips.add(clip);
+          continue;
+        }
+        if (atUs <= clip.sourceInUs || atUs >= clip.sourceOutUs) {
+          throw ArgumentError('Split point must be strictly inside the clip source range.');
+        }
+        found = true;
+        final first = clip.copyWith(sourceOutUs: atUs);
+        final second = TimelineClip(
+          id: 'clip-${DateTime.now().microsecondsSinceEpoch}-${clip.id}',
+          assetId: clip.assetId,
+          kind: clip.kind,
+          startUs: clip.startUs + (atUs - clip.sourceInUs),
+          sourceInUs: atUs,
+          sourceOutUs: clip.sourceOutUs,
+          volume: clip.volume,
+        );
+        clips.add(first);
+        clips.add(second);
+      }
+      tracks.add(TimelineTrack(id: track.id, name: track.name, clips: clips));
+    }
+    if (!found) return;
     _commit(Timeline(tracks: tracks));
   }
 

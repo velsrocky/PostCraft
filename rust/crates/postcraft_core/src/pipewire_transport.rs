@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+#[cfg(target_os = "linux")]
 use std::path::Path;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -391,7 +392,6 @@ pub fn inspect() -> PipewireTransportState {
     failure("PipeWire transport inspection is only available on Linux.".into())
 }
 
-#[cfg(target_os = "linux")]
 fn failure(reason: String) -> PipewireTransportState {
     PipewireTransportState {
         runtime_available: false,
@@ -402,6 +402,7 @@ fn failure(reason: String) -> PipewireTransportState {
     }
 }
 
+#[cfg(target_os = "linux")]
 use std::time::Duration;
 
 #[cfg(test)]

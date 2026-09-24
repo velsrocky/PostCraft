@@ -2,6 +2,7 @@ use crate::discovery::resolve_engines;
 use crate::{MediaError, MediaResult};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+#[cfg(not(any(target_os = "windows", target_os = "macos")))]
 use std::env;
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
@@ -44,14 +45,46 @@ fn sessions() -> &'static Mutex<HashMap<u32, RecordingProcess>> {
 
 static NEXT_SESSION_ID: AtomicU32 = AtomicU32::new(1);
 
-pub fn recording_capabilities() -> RecordingCapabilities {
+#[cfg(target_os = "windows")]
+fn platform_recording_capabilities() -> RecordingCapabilities {
+    let supported = resolve_engines().ffmpeg.is_some();
+    RecordingCapabilities {
+        supported,
+        microphone: false,
+        system_audio: false,
+        reason: if supported {
+            "Windows screen recording via FFmpeg gdigrab.".to_owned()
+        } else {
+            "FFmpeg was not found for gdigrab recording.".to_owned()
+        },
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn platform_recording_capabilities() -> RecordingCapabilities {
+    let supported = resolve_engines().ffmpeg.is_some();
+    RecordingCapabilities {
+        supported,
+        microphone: false,
+        system_audio: false,
+        reason: if supported {
+            "macOS screen recording via FFmpeg avfoundation; grant Screen Recording permission in System Settings."
+                .to_owned()
+        } else {
+            "FFmpeg was not found for avfoundation recording.".to_owned()
+        },
+    }
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+fn platform_recording_capabilities() -> RecordingCapabilities {
     let session = env::var("XDG_SESSION_TYPE")
         .unwrap_or_default()
         .to_lowercase();
     let supported =
         session == "x11" && env::var_os("DISPLAY").is_some() && resolve_engines().ffmpeg.is_some();
     let reason = if supported {
-        "X11 screen recording is available through FFmpeg.".to_owned()
+        "X11 screen recording is available through FFmpeg x11grab.".to_owned()
     } else if session == "wayland" {
         "Wayland recording requires a PipeWire portal backend; the X11 recorder is not used on Wayland.".to_owned()
     } else if env::var_os("DISPLAY").is_none() {
@@ -65,6 +98,51 @@ pub fn recording_capabilities() -> RecordingCapabilities {
         system_audio: false,
         reason,
     }
+}
+
+pub fn recording_capabilities() -> RecordingCapabilities {
+    platform_recording_capabilities()
+}
+
+/// FFmpeg input arguments for the platform screen source.
+#[cfg(target_os = "windows")]
+fn recording_input_args(request: &RecordingRequest) -> MediaResult<Vec<String>> {
+    Ok(vec![
+        "-f".to_owned(),
+        "gdigrab".to_owned(),
+        "-framerate".to_owned(),
+        request.fps.to_string(),
+        "-i".to_owned(),
+        "desktop".to_owned(),
+    ])
+}
+
+#[cfg(target_os = "macos")]
+fn recording_input_args(request: &RecordingRequest) -> MediaResult<Vec<String>> {
+    Ok(vec![
+        "-f".to_owned(),
+        "avfoundation".to_owned(),
+        "-framerate".to_owned(),
+        request.fps.to_string(),
+        "-i".to_owned(),
+        "1:none".to_owned(),
+    ])
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+fn recording_input_args(request: &RecordingRequest) -> MediaResult<Vec<String>> {
+    let display = env::var("DISPLAY")
+        .map_err(|_| MediaError::new("recording_unsupported", "DISPLAY is unavailable"))?;
+    Ok(vec![
+        "-f".to_owned(),
+        "x11grab".to_owned(),
+        "-video_size".to_owned(),
+        format!("{}x{}", request.width, request.height),
+        "-framerate".to_owned(),
+        request.fps.to_string(),
+        "-i".to_owned(),
+        format!("{display}+0,0"),
+    ])
 }
 
 pub fn start_recording(request: RecordingRequest) -> MediaResult<RecordingSession> {
@@ -91,14 +169,13 @@ pub fn start_recording(request: RecordingRequest) -> MediaResult<RecordingSessio
     if request.include_microphone || request.include_system_audio {
         return Err(MediaError::new(
             "audio_unsupported",
-            "Linux audio capture is not configured for this recorder",
+            "Microphone and system audio capture is not configured for this recorder",
         ));
     }
     let ffmpeg = resolve_engines()
         .ffmpeg
         .ok_or_else(|| MediaError::new("ffmpeg_missing", "FFmpeg was not found."))?;
-    let display = env::var("DISPLAY")
-        .map_err(|_| MediaError::new("recording_unsupported", "DISPLAY is unavailable"))?;
+    let input_args = recording_input_args(&request)?;
     let output = PathBuf::from(&request.output);
     if output.extension().and_then(|value| value.to_str()) != Some("mp4") {
         return Err(MediaError::new(
@@ -111,20 +188,9 @@ pub fn start_recording(request: RecordingRequest) -> MediaResult<RecordingSessio
             .map_err(|error| MediaError::new("recording_output", error.to_string()))?;
     }
     let child = Command::new(ffmpeg)
+        .args(["-hide_banner", "-loglevel", "error", "-nostdin", "-y"])
+        .args(&input_args)
         .args([
-            "-hide_banner",
-            "-loglevel",
-            "error",
-            "-nostdin",
-            "-y",
-            "-f",
-            "x11grab",
-            "-video_size",
-            &format!("{}x{}", request.width, request.height),
-            "-framerate",
-            &request.fps.to_string(),
-            "-i",
-            &format!("{display}+0,0"),
             "-c:v",
             "libx264",
             "-preset",

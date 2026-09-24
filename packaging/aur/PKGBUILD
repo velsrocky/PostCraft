@@ -1,0 +1,36 @@
+# Maintainer: Velstech <dev@adventureschool.com>
+pkgname=postcraft-appimage
+pkgver=1.0.0
+pkgrel=1
+pkgdesc="Local-first screenshot annotation and media studio"
+arch=('x86_64')
+url="https://github.com/velsrocky/PostCraft"
+license=('MIT')
+depends=('gtk3' 'ffmpeg' 'xdg-desktop-portal')
+optdepends=(
+  'libxrandr: multi-display enumeration on X11'
+  'pipewire: Wayland ScreenCast recording'
+)
+provides=('postcraft')
+conflicts=('postcraft')
+source=("PostCraft-${pkgver}-x86_64.AppImage::https://github.com/velsrocky/PostCraft/releases/download/v${pkgver}/PostCraft-${pkgver}-x86_64.AppImage"
+        "com.velstech.postcraft.desktop"
+        "com.velstech.postcraft.appdata.xml"
+        "com.velstech.postcraft.svg")
+sha256sums=('SKIP'
+            'SKIP'
+            'SKIP'
+            'SKIP')
+
+package() {
+  install -Dm755 "${srcdir}/PostCraft-${pkgver}-x86_64.AppImage" \
+    "${pkgdir}/opt/postcraft/PostCraft.AppImage"
+  install -Dm644 "${srcdir}/com.velstech.postcraft.desktop" \
+    "${pkgdir}/usr/share/applications/com.velstech.postcraft.desktop"
+  install -Dm644 "${srcdir}/com.velstech.postcraft.appdata.xml" \
+    "${pkgdir}/usr/share/metainfo/com.velstech.postcraft.appdata.xml"
+  install -Dm644 "${srcdir}/com.velstech.postcraft.svg" \
+    "${pkgdir}/usr/share/icons/hicolor/scalable/apps/com.velstech.postcraft.svg"
+  install -d "${pkgdir}/usr/bin"
+  ln -sf /opt/postcraft/PostCraft.AppImage "${pkgdir}/usr/bin/postcraft"
+}

@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+#[cfg(target_os = "linux")]
 use std::process::Command;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -25,23 +26,9 @@ pub fn discover() -> CaptureTargetReport {
     #[cfg(target_os = "linux")]
     return discover_linux();
     #[cfg(target_os = "windows")]
-    return CaptureTargetReport {
-        targets: Vec::new(),
-        window_capture: false,
-        multi_display: false,
-        microphone: false,
-        system_audio: false,
-        reason: "Windows Graphics Capture adapter is not linked in this build.".to_owned(),
-    };
+    return crate::capture_windows::discover_targets();
     #[cfg(target_os = "macos")]
-    return CaptureTargetReport {
-        targets: Vec::new(),
-        window_capture: false,
-        multi_display: false,
-        microphone: false,
-        system_audio: false,
-        reason: "macOS ScreenCaptureKit adapter is not linked in this build.".to_owned(),
-    };
+    return crate::capture_macos::discover_targets();
     #[cfg(not(any(target_os = "linux", target_os = "windows", target_os = "macos")))]
     CaptureTargetReport {
         targets: Vec::new(),

@@ -39,7 +39,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.13.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 1092786721;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 1895317835;
 
 // Section: executor
 
@@ -152,10 +152,11 @@ fn wire__crate__api__capture_desktop_impl(
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_mode = <String>::sse_decode(&mut deserializer);
+            let api_target_id = <Option<String>>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
                 transform_result_sse::<_, crate::NativeError>((move || {
-                    let output_ok = crate::api::capture_desktop(api_mode)?;
+                    let output_ok = crate::api::capture_desktop(api_mode, api_target_id)?;
                     std::result::Result::Ok(output_ok)
                 })())
             }
@@ -320,6 +321,73 @@ fn wire__crate__api__inspect_pipewire_transport_impl(
             move |context| {
                 transform_result_sse::<_, ()>((move || {
                     let output_ok = Ok::<_, ()>(crate::api::inspect_pipewire_transport())?;
+                    std::result::Result::Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__install_panic_hook_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "install_panic_hook",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_log_path = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, ()>((move || {
+                    let output_ok = Ok::<_, ()>({
+                        crate::api::install_panic_hook(api_log_path);
+                    })?;
+                    std::result::Result::Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__media_status_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "media_status",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, ()>((move || {
+                    let output_ok = Ok::<_, ()>(crate::api::media_status())?;
                     std::result::Result::Ok(output_ok)
                 })())
             }
@@ -1209,35 +1277,37 @@ fn pde_ffi_dispatcher_primary_impl(
         6 => wire__crate__api__generate_waveform_data_impl(port, ptr, rust_vec_len, data_len),
         7 => wire__crate__api__global_shortcuts_supported_impl(port, ptr, rust_vec_len, data_len),
         8 => wire__crate__api__inspect_pipewire_transport_impl(port, ptr, rust_vec_len, data_len),
-        9 => wire__crate__api__pixelate_region_rgba_impl(port, ptr, rust_vec_len, data_len),
-        10 => wire__crate__api__pixelate_rgba_impl(port, ptr, rust_vec_len, data_len),
-        11 => wire__crate__api__platform_capabilities_impl(port, ptr, rust_vec_len, data_len),
-        12 => wire__crate__api__poll_global_shortcut_impl(port, ptr, rust_vec_len, data_len),
-        13 => wire__crate__api__poll_render_session_impl(port, ptr, rust_vec_len, data_len),
-        14 => wire__crate__api__prepare_wayland_screencast_impl(port, ptr, rust_vec_len, data_len),
-        15 => wire__crate__api__probe_authorized_pipewire_stream_impl(
+        9 => wire__crate__api__install_panic_hook_impl(port, ptr, rust_vec_len, data_len),
+        10 => wire__crate__api__media_status_impl(port, ptr, rust_vec_len, data_len),
+        11 => wire__crate__api__pixelate_region_rgba_impl(port, ptr, rust_vec_len, data_len),
+        12 => wire__crate__api__pixelate_rgba_impl(port, ptr, rust_vec_len, data_len),
+        13 => wire__crate__api__platform_capabilities_impl(port, ptr, rust_vec_len, data_len),
+        14 => wire__crate__api__poll_global_shortcut_impl(port, ptr, rust_vec_len, data_len),
+        15 => wire__crate__api__poll_render_session_impl(port, ptr, rust_vec_len, data_len),
+        16 => wire__crate__api__prepare_wayland_screencast_impl(port, ptr, rust_vec_len, data_len),
+        17 => wire__crate__api__probe_authorized_pipewire_stream_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        16 => wire__crate__api__probe_media_file_impl(port, ptr, rust_vec_len, data_len),
-        17 => wire__crate__api__record_authorized_pipewire_stream_impl(
+        18 => wire__crate__api__probe_media_file_impl(port, ptr, rust_vec_len, data_len),
+        19 => wire__crate__api__record_authorized_pipewire_stream_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        18 => wire__crate__api__recording_capabilities_impl(port, ptr, rust_vec_len, data_len),
-        19 => wire__crate__api__runtime_info_impl(port, ptr, rust_vec_len, data_len),
-        20 => wire__crate__api__start_global_shortcuts_impl(port, ptr, rust_vec_len, data_len),
-        21 => wire__crate__api__start_recording_session_impl(port, ptr, rust_vec_len, data_len),
-        22 => {
+        20 => wire__crate__api__recording_capabilities_impl(port, ptr, rust_vec_len, data_len),
+        21 => wire__crate__api__runtime_info_impl(port, ptr, rust_vec_len, data_len),
+        22 => wire__crate__api__start_global_shortcuts_impl(port, ptr, rust_vec_len, data_len),
+        23 => wire__crate__api__start_recording_session_impl(port, ptr, rust_vec_len, data_len),
+        24 => {
             wire__crate__api__start_timeline_render_session_impl(port, ptr, rust_vec_len, data_len)
         }
-        23 => wire__crate__api__start_wayland_screencast_impl(port, ptr, rust_vec_len, data_len),
-        24 => wire__crate__api__stop_global_shortcuts_impl(port, ptr, rust_vec_len, data_len),
-        25 => wire__crate__api__stop_recording_impl(port, ptr, rust_vec_len, data_len),
+        25 => wire__crate__api__start_wayland_screencast_impl(port, ptr, rust_vec_len, data_len),
+        26 => wire__crate__api__stop_global_shortcuts_impl(port, ptr, rust_vec_len, data_len),
+        27 => wire__crate__api__stop_recording_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }

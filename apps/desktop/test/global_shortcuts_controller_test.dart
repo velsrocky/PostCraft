@@ -112,5 +112,6 @@ class _FakeShortcutService extends GlobalShortcutService {
 class _FakeRunner implements CaptureRunner {
   final List<CaptureMode> modes = [];
   @override
-  Future<void> run(CaptureMode mode) async => modes.add(mode);
+  Future<void> run(CaptureMode mode, {String? targetId}) async =>
+      modes.add(mode);
 }

@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme.dart';
+import '../../../core/app_version.dart';
+import '../../../core/update_check.dart';
 import '../../capture/application/capture_providers.dart';
 import '../../capture/application/global_shortcuts_controller.dart';
+import '../application/settings_providers.dart';
 
 class SettingsPage extends ConsumerWidget {
   const SettingsPage({super.key});
@@ -18,6 +21,8 @@ class SettingsPage extends ConsumerWidget {
     final recording = ref.watch(recordingCapabilitiesProvider);
     final screencast = ref.watch(waylandScreencastPreparationProvider);
     final pipewire = ref.watch(pipewireTransportProvider);
+    final mediaEngines = ref.watch(nativeRecordingCapabilitiesProvider);
+    final runtimeInfo = ref.watch(runtimeInfoProvider);
 
     return ListView(
       padding: const EdgeInsets.all(28),
@@ -98,6 +103,28 @@ class SettingsPage extends ConsumerWidget {
             'shortcuts.',
           ),
         const SizedBox(height: 16),
+        const _Section('Media engines'),
+        _SettingTile(
+          title: 'Recording',
+          subtitle: mediaEngines.when(
+            loading: () => 'Checking recording capabilities…',
+            error: (error, _) => 'Could not query recording capabilities.',
+            data: (capabilities) => capabilities.reason,
+          ),
+          trailing: mediaEngines.when(
+            loading: () =>
+                const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+            error: (_, _) => const _CapabilityChip(available: false),
+            data: (capabilities) =>
+                _CapabilityChip(available: capabilities.supported),
+          ),
+        ),
+        const _Hint(
+          'FFmpeg and ffprobe must be on PATH (or set POSTCRAFT_FFMPEG / '
+          'POSTCRAFT_FFPROBE) for recording, timeline render, video posters, '
+          'and audio waveforms. PostCraft does not bundle FFmpeg.',
+        ),
+        const SizedBox(height: 16),
         const _Section('Editor'),
         const _SettingTile(
           title: 'Autosave',
@@ -121,9 +148,85 @@ class SettingsPage extends ConsumerWidget {
             data: (capabilities) => _CapabilityChip(available: capabilities.supported),
           ),
         ),
+        const SizedBox(height: 16),
+        const _Section('About'),
+        const _SettingTile(
+          title: 'App version',
+          subtitle: AppVersion.string,
+          trailing: Icon(
+            Icons.verified_outlined,
+            color: PostCraftTheme.muted,
+            size: 18,
+          ),
+        ),
+        _SettingTile(
+          title: 'Native runtime',
+          subtitle: runtimeInfo.when(
+            loading: () => 'Loading native runtime…',
+            error: (error, _) => 'Native runtime version unavailable.',
+            data: (info) => '${info.version} · ${info.platform}',
+          ),
+          trailing: runtimeInfo.when(
+            loading: () =>
+                const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+            error: (_, _) => const Icon(
+              Icons.error_outline_rounded,
+              color: PostCraftTheme.muted,
+              size: 18,
+            ),
+            data: (_) => const Icon(
+              Icons.memory_rounded,
+              color: PostCraftTheme.muted,
+              size: 18,
+            ),
+          ),
+        ),
+        const _UpdateCheckTile(),
       ],
     );
   }
+}
+
+class _UpdateCheckTile extends StatefulWidget {
+  const _UpdateCheckTile();
+
+  @override
+  State<_UpdateCheckTile> createState() => _UpdateCheckTileState();
+}
+
+class _UpdateCheckTileState extends State<_UpdateCheckTile> {
+  bool _checking = false;
+
+  Future<void> _check() async {
+    if (_checking) return;
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _checking = true);
+    final result = await UpdateCheckService.check();
+    if (mounted) setState(() => _checking = false);
+    messenger.showSnackBar(SnackBar(content: Text(_message(result))));
+  }
+
+  String _message(UpdateCheckResult result) => switch (result) {
+    UpToDate(:final version) => 'PostCraft $version is up to date.',
+    UpdateAvailable(:final tag, :final url) => 'PostCraft $tag is available: $url',
+    UpdateCheckFailed(:final reason) => 'Update check failed: $reason',
+  };
+
+  @override
+  Widget build(BuildContext context) => _SettingTile(
+    title: 'Updates',
+    subtitle: 'Check GitHub for a newer PostCraft release',
+    trailing: TextButton(
+      onPressed: _checking ? null : _check,
+      child: _checking
+          ? const SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : const Text('Check for updates'),
+    ),
+  );
 }
 
 class _Section extends StatelessWidget {
