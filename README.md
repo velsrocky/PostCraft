@@ -2,6 +2,25 @@
 
 PostCraft is a local-first desktop app for screenshot capture, visual annotation, and creator-ready exports.
 
+## Install (Linux)
+
+Download `PostCraft-1.0.0-x86_64.AppImage` from the [latest release](https://github.com/velsrocky/PostCraft/releases/latest), then:
+
+```bash
+chmod +x PostCraft-1.0.0-x86_64.AppImage
+./PostCraft-1.0.0-x86_64.AppImage
+```
+
+Optional integrity check:
+
+```bash
+sha256sum -c SHA256SUMS
+```
+
+**Runtime requirements:** GTK 3, a D-Bus session, and `xdg-desktop-portal` with a Screenshot backend for capture. **FFmpeg and ffprobe must be on `PATH`** for recording, timeline render, video posters, and audio waveforms (`sudo apt install ffmpeg` / `dnf` / `pacman`). PostCraft does not bundle FFmpeg.
+
+The AppImage is **unsigned**. Prefer the GitHub release page over third-party mirrors.
+
 ## Current working slice
 
 > **Platform status:** Capture, global shortcuts, multi-display targeting, and media recording are implemented for **Linux** (XDG portals + X11 xrandr) and compiled for **Windows/macOS** (GDI/CoreGraphics + FFmpeg gdigrab/avfoundation), with Linux as the primary verified ship target. Interactive window stills, system/microphone audio, and social OAuth share remain follow-on work. Local share (copy/save/open folder) ships now.
@@ -71,8 +90,8 @@ make validate-linux-bundle
 
 Linux release packaging and runtime requirements are documented in
 `docs/release/linux.md`. Distribution steps (GitHub Releases, AUR, AppImageHub)
-are in `packaging/DISTRIBUTION.md`. The signed AppImage pipeline does not
-bundle FFmpeg.
+are in `packaging/DISTRIBUTION.md`. The AppImage is not code-signed and does
+not bundle FFmpeg.
 
 Regenerate bindings after editing `rust/crates/postcraft_core/src/api.rs`:
 

@@ -12,6 +12,8 @@
   <developer id="com.velstech">
     <name>Velstech</name>
   </developer>
+  <url type="homepage">https://github.com/velsrocky/PostCraft</url>
+  <url type="bugtracker">https://github.com/velsrocky/PostCraft/issues</url>
   <content_rating type="oars-1.1"/>
   <releases>
     <release version="1.0.0" date="2026-09-24"/>
